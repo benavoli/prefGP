@@ -9,7 +9,7 @@ from scipy.stats import norm, multivariate_normal
 
 class erroneousPreference(abstractModelFull):
     
-    def __init__(self,data,Kernel,params,inf_method='Laplace'):
+    def __init__(self,data,Kernel,params,inf_method='laplace'):
         """
         The erroneousPreference model assumes preferences may be wrong due to . The likelihood 
         is probit.
@@ -52,10 +52,12 @@ class erroneousPreference(abstractModelFull):
 
         def hess_log_like(f,data=self.data,params=self.params):
             W = self.PrefM
+            #print(W.shape)
             z = W@f
             r = np.exp(norm.logpdf(z)-norm.logcdf(z))
-            D = (W.multiply((np.multiply(r,z)+r**2)))    
-            H = -np.sum( D.toarray()[...,None] * W.toarray()[:,None],axis=0)
+            D = (W.multiply((np.multiply(r,z)+r**2)))
+            #print(D.shape)
+            H = -np.einsum('ij,ik->jk', D.toarray(), W.toarray()) #np.sum( D.toarray()[...,None] * W.toarray()[:,None],axis=0)
             return H
         
         self._log_likelihood = log_likelihood       

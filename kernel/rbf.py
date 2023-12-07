@@ -20,7 +20,8 @@ def RBF(X1,X2,params,diag_=False):
 
 
 def BlockRBF(X1,X2,params,diag_=False):
-    numblocks = int((len(params)-1)/2)
+    #print(params)
+    numblocks = np.sum(['lengthscale' in  c for c in list(params.keys())])
     n1 = int(X1.shape[0]/numblocks)
     n2 = int(X2.shape[0]/numblocks)
     

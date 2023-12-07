@@ -9,7 +9,7 @@ import jax
 
 class erroneousChoice(abstractModelFull):
     
-    def __init__(self,data,Kernel,params,latent_dim,delta=0, jitter=1e-6,inf_method='advi',ARD=True):
+    def __init__(self,data,Kernel,params,latent_dim,scale=1.65, jitter=1e-6,inf_method='advi',ARD=True):
         """
         The erroneousChoice model for modelling choice functions. The likelihood 
         uses a normal-cdf to smooth the indicators to model the errors. 
@@ -39,8 +39,8 @@ class erroneousChoice(abstractModelFull):
         
         self.samples = [] # posterior samples
         self.jitter = jitter
-        self._scale = 1.65
-        self.delta=delta
+        self._scale = scale
+     
         
         CA = data["CA"]
         RA = data["RA"]
@@ -99,7 +99,7 @@ class erroneousChoice(abstractModelFull):
             #v = jax.scipy.stats.norm.cdf(U0[CAr[:,0]]-U0[CAr[:,1]])
             if len(CAr)>0:
                 print
-                x = (U0[CAr[:,0]]-U0[CAr[:,1]]-self.delta)
+                x = (U0[CAr[:,0]]-U0[CAr[:,1]])
                 v = 0.5 * (jax.numpy.tanh(x * self._scale / 2) + 1)
                 q = -jax.numpy.prod(v,axis=1)-jax.numpy.prod(1-v,axis=1)
                 return jax.numpy.sum(
@@ -113,7 +113,7 @@ class erroneousChoice(abstractModelFull):
             '''
             #A=jax.scipy.stats.norm.cdf(U0[RAr[:,0:-1],:]-U0[RAr[:,[-1]],:])
             if len(RAr)>0:
-                x = (U0[RAr[:,0:-1],:]-U0[RAr[:,[-1]],:]-self.delta)
+                x = (U0[RAr[:,0:-1],:]-U0[RAr[:,[-1]],:])
                 A = 0.5 * (jax.numpy.tanh(x * self._scale / 2) + 1)
                 q = -jax.numpy.prod(1-jax.numpy.prod(A,axis=2),axis=1)
                 return jax.numpy.sum(jax.numpy.log1p(eps+q))

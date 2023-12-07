@@ -28,7 +28,7 @@ def transform(x):
 
 class inference_advi:
     """
-    Class GP_Laplace
+    Class ADVI
     """
     def __init__(self, data, Kernel, params, log_likelihood,  
                  jitter=1e-6):
@@ -70,7 +70,7 @@ class inference_advi:
         
         from jax.scipy.optimize import minimize        
         def logjoint(f):
-            return -log_lik_fun(f)+f.T@IKxx@f
+            return -log_lik_fun(f)+f.T@IKxx@f/2
        
         #find MAP
         if init_f==[]:

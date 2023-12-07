@@ -16,7 +16,10 @@ from utility.paramz import DictVectorizer
 from scipy.optimize import minimize
 from scipy.linalg import solve, solve_triangular, cholesky, sqrtm
 from scipy import optimize
+from tqdm import tqdm_notebook as tqdm
 
+
+        
 class inference_laplace:
     """
     Class GP_Laplace
@@ -137,9 +140,8 @@ class inference_laplace:
 
             f,lla = self.laplace(K,loglike,grad_loglike,hess_loglike)
             val = np.real(-lla)#minimize
-            #print(val)
+            print(val)
             return val
-        
         optml=np.inf
         for i in range(num_restarts):
             res = minimize(objective, init_params, 
@@ -147,7 +149,8 @@ class inference_laplace:
                               args=(loglike,grad_loglike,hess_loglike),
                               method=method,options={'maxiter': max_iters, 
                                                      'ftol':1e-5,
-                                                     'disp': True})
+                                                     'disp': True},
+                              )
             if res.fun<optml:
                 params_best=res.x #init_params 
                 optml=res.fun

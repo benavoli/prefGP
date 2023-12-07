@@ -37,7 +37,7 @@ class abstractModelFull(ABC):
                                           self._grad_loglikelihood,
                                           self._hess_loglikelihood)
             infer.optimize(self.recompute_grad_hessian_at_params_change,
-                           num_restarts=num_restarts)
+                               num_restarts=num_restarts,max_iters=niterations)
             self.params = infer.params
         elif self.inf_method=='advi':
             infer = ADVIF.inference_advi(self.data, 
@@ -86,7 +86,7 @@ class abstractModelSparse(ABC):
                                           self._grad_loglikelihood,
                                           self._hess_loglikelihood)
             infer.optimize(self.recompute_grad_hessian_at_params_change,
-                           num_restarts=num_restarts)
+                           num_restarts=num_restarts,max_iters=niterations)
             self.params = infer.params
         elif self.inf_method=='advi':
             infer = ADVIS.inference_advi(self.data, 

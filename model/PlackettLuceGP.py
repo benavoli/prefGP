@@ -5,7 +5,7 @@ import jax
 
 class PlackettLuceGP(abstractModelFull):
     
-    def __init__(self,data,Kernel,params,latent_dim,delta=0, jitter=1e-6,inf_method='advi',ARD=True):
+    def __init__(self,data,Kernel,params,latent_dim,scale=1.65, jitter=1e-6,inf_method='advi',ARD=True, exclude_levels=[]):
         """
         The PlackettLuceGP model for modelling label ranking preferences. The likelihood 
         is an extension of the Plackett-Luce model. 
@@ -36,8 +36,8 @@ class PlackettLuceGP(abstractModelFull):
         
         self.samples = [] # posterior samples
         self.jitter = jitter
-        self._scale = 1.65
-        self.delta=delta
+        self._scale = scale
+        
         
         def build_M(pref):
             M={}
@@ -53,6 +53,9 @@ class PlackettLuceGP(abstractModelFull):
             return M
         #build a dictionary of partial ranking
         dict_M=build_M(data['Ranking'])    
+        
+        for l in exclude_levels: #exclude ranking data
+            del dict_M[l]
         
 
 
