@@ -145,10 +145,12 @@ def liness_step(x00, AA, bb, mean, C, nsamples,  tune=100, progress=True):
     pbar = tqdm(total = nsamples+tune, disable=1-progress, position=0, leave=True)
     while mc < nsamples+tune:
         nu0 = L@np.random.randn(L.shape[0],1)
-        nu = AA@(nu0)
+        nu = np.asarray(AA@(nu0))
         #print(nu0[0:5])
         x0 = AA@x00
-        r_sq = (x0)**2 +(nu)**2
+        print(type(x0),nu.shape)
+        print(type(nu),nu.shape)
+        r_sq = np.power(x0,2) +np.power(nu,2)
         
 
         thetas_1=2*np.arctan2(nu-np.sqrt(r_sq -b**2),x0+b)#+np.pi

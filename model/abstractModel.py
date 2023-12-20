@@ -25,9 +25,9 @@ class abstractModelFull(ABC):
          
     
     def optimize_hyperparams(self,num_restarts=1,
-                             niterations=2000,
+                             niterations=200,
                              kernel_hypers_fixed=False,
-                             init_f=[]):
+                             init_f=[],diagonal=False):
 
         if self.inf_method=='laplace':
             infer = LAP.inference_laplace(self.data, 
@@ -46,13 +46,13 @@ class abstractModelFull(ABC):
                                           self._log_likelihood)
             infer.optimize(niterations,
                            kernel_hypers_fixed=kernel_hypers_fixed,
-                           init_f=init_f)
+                           init_f=init_f,diagonal=diagonal)
             self.meanVI = infer.meanVI
             self.SigmaVI = infer.SigmaVI
             self.log_kernel_hypers = infer.log_kernel_hypers
             self.advi_params = infer.advi_params
             self.params = infer.params
-            self._MAP = infer.MAP
+            #self._MAP = infer.MAP
         
         
 class abstractModelSparse(ABC):

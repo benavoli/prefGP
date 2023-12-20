@@ -32,3 +32,4 @@ def BlockRBF(X1,X2,params,diag_=False):
         B1 = block_diag(B1,B2)
 
     return B1
+

@@ -9,12 +9,12 @@ Created on Sat Jun  5 2022
 from jax.config import config
 config.update("jax_enable_x64", True)
 #config.update('jax_platform_name', 'cpu')
-import jax
+#import jax
 import numpy as np
-from jax import grad, hessian,  jit, jacfwd, jacrev
+from jax import grad,  jit, jacfwd, jacrev
 from utility.paramz import DictVectorizer
 from scipy.optimize import minimize
-from scipy.linalg import solve, solve_triangular, cholesky, sqrtm
+from scipy.linalg import solve, solve_triangular, cholesky
 from scipy import optimize
 from tqdm import tqdm_notebook as tqdm
 
@@ -49,7 +49,7 @@ class inference_laplace:
         logdet_L= np.sum(np.log(np.diag(L)))
         return K_Wi_i, logdet_L
     
-
+   
     def laplace(self,K,loglike,grad_loglike, hess_loglike):
         f = np.zeros((K.shape[0],1))
         I = np.eye(K.shape[0])
@@ -104,7 +104,7 @@ class inference_laplace:
         return f, lla
     
     def _log_like_grad_Hessian(self):
-        #@jit
+        
         def loglike(f):
             return self.log_likelihood(f,self.data,self.params)
         
@@ -123,7 +123,8 @@ class inference_laplace:
 
         return loglike,grad_loglike,hess_loglike
     
-    def optimize(self,recompute_grad_hessian_at_params_change,num_restarts=1,max_iters=200,method='l-bfgs-b'):
+    def optimize(self,recompute_grad_hessian_at_params_change,
+                 num_restarts=1,max_iters=200,method='l-bfgs-b'):
         dic = DictVectorizer()
        
         init_params,bounds=dic.fit_transform(self.params)
@@ -140,17 +141,32 @@ class inference_laplace:
 
             f,lla = self.laplace(K,loglike,grad_loglike,hess_loglike)
             val = np.real(-lla)#minimize
-            print(val)
+            #print(val)
+            pbar.set_description(f" Objective {val}", refresh=True)
             return val
-        optml=np.inf
-        for i in range(num_restarts):
+        
+        def progress_callback(xk):
+            # This callback function will be called after each iteration of the optimization
+            pbar.update(1)  # Update the progress bar
+            
+        def tmp_fun():
+            global pbar
+            pbar = tqdm(total=max_iters,  position=0, leave=True)
             res = minimize(objective, init_params, 
                               bounds=bounds,
                               args=(loglike,grad_loglike,hess_loglike),
+                              callback=progress_callback,
                               method=method,options={'maxiter': max_iters, 
-                                                     'ftol':1e-5,
-                                                     'disp': True},
+                                                     #'ftol':1e-9,
+                                                     'disp': False},
                               )
+            return res
+
+
+        optml=np.inf
+        for i in range(num_restarts):
+            
+            res = tmp_fun()
             if res.fun<optml:
                 params_best=res.x #init_params 
                 optml=res.fun
@@ -158,6 +174,11 @@ class inference_laplace:
             print("Iteration "+str(i)+" ",-res.fun)
             
         self.params=dic.inverse_transform(params_best,bounds)
+        
+        loglike,grad_loglike,hess_loglike=self._log_like_grad_Hessian()
+        Kxx=self._Kernel(self.X,self.X,self.params) 
+        Kxx = Kxx + self.jitter * np.eye(Kxx.shape[0])  
+        self.fMAP,lla = self.laplace(Kxx,loglike,grad_loglike,hess_loglike)
         
     
     def predict(self, Xpred):

@@ -1,15 +1,15 @@
 from .abstractModel import abstractModelFull
-from scipy.linalg import cholesky, block_diag, solve_triangular, cho_solve
+from scipy.linalg import cholesky,  cho_solve
 import numpy as np
 from scipy.optimize import linprog
 from inference import slice_sampler
 from utility.linalg import build_sparse_prefM
 import scipy.sparse as sparse
 from scipy.stats import norm, multivariate_normal
-
+import jax
 class erroneousPreference(abstractModelFull):
     
-    def __init__(self,data,Kernel,params,inf_method='laplace'):
+    def __init__(self,data,Kernel,params,inf_method='laplace',jitter=1e-6):
         """
         The erroneousPreference model assumes preferences may be wrong due to . The likelihood 
         is probit.
@@ -28,7 +28,7 @@ class erroneousPreference(abstractModelFull):
         self.Kernel = Kernel
         
         self.samples = [] # posterior samples
-        self.jitter = 1e-6
+        self.jitter = jitter
         self.inf_method = inf_method
         
         #build sparse pref Matrix
@@ -36,33 +36,43 @@ class erroneousPreference(abstractModelFull):
                                         self.X.shape[0],
                                         1)
         self.PrefM = sparse.coo_matrix(self.PrefM, shape=(len(self.data["Pairs"]),self.X.shape[0]))
+        self.PrefM = self.PrefM.toarray()
         
         #this is used internally to estimate hyperparams via Laplace approximation
         def log_likelihood(f,data=self.data,params=self.params):
             W = self.PrefM
             z = W@f
             return np.sum(norm.logcdf(z))
-
+        '''
+        def log_likelihood(f,data=self.data,params=self.params):
+            W = self.PrefM
+            z = W@f
+            return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
+        '''
         def grad_log_like(f,data=self.data,params=self.params):
             W = self.PrefM
             z=W@f
             r = np.exp(norm.logpdf(z)-norm.logcdf(z))
-            val = (W.T).multiply(r.T)
-            return np.sum(val,axis=1)
+            #val = (W.T).multiply(r.T)
+            val = np.multiply(W.T,r.T)
+            return np.sum(val,axis=1)[:,None]
 
         def hess_log_like(f,data=self.data,params=self.params):
             W = self.PrefM
             #print(W.shape)
             z = W@f
             r = np.exp(norm.logpdf(z)-norm.logcdf(z))
-            D = (W.multiply((np.multiply(r,z)+r**2)))
+            #D = (W.multiply((np.multiply(r,z)+r**2)))
+            D = np.multiply(W,((np.multiply(r,z)+r**2)))
             #print(D.shape)
-            H = -np.einsum('ij,ik->jk', D.toarray(), W.toarray()) #np.sum( D.toarray()[...,None] * W.toarray()[:,None],axis=0)
+            H = -D.T@W #-D.toarray().T@W.toarray()
+            #H = -np.einsum('ij,ik->jk', D.toarray(), W.toarray()) #
+            #H = -np.sum( D.toarray()[...,None] * W.toarray()[:,None],axis=0)
             return H
         
         self._log_likelihood = log_likelihood       
-        self._grad_loglikelihood = grad_log_like
-        self._hess_loglikelihood = hess_log_like
+        self._grad_loglikelihood =  grad_log_like
+        self._hess_loglikelihood =  hess_log_like
         self.recompute_grad_hessian_at_params_change=False#log_likelihood does not depend on params
         
     

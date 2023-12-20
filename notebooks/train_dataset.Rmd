@@ -1,0 +1,26 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(mlogit)
+data("Train", package = "mlogit")
+Train$choiceid <- 1:nrow(Train)
+Tr <- dfidx(Train, shape = "wide", choice = "choice", varying = 4:11, sep = "_", 
+            idx = list(c("choiceid", "id")), idnames = c("chid", "alt")) #, opposite = c("price", "comfort", "time", "change"))
+  #mlogit.data(Train, shape = "wide", choice = "choice", varying = 4:11, sep = "", alt.levels = c(1, 2), id = "id")
+ #Tr$price <- Tr$price/100 * 2.20371
+ #Tr$time <- Tr$time/60
+
+ ml.Train <- mlogit(choice ~ price + time + change + comfort | -1, Tr[1:4000,])
+ ml.Train
+```
+```{r}
+Te = Tr[4001:5858,]
+preds=predict( ml.Train,newdata = Te)
+ypred=as.vector(t(preds>0.5))
+mean(as.numeric(ypred)[c(TRUE,FALSE)]==as.numeric(Te$choice)[c(TRUE,FALSE)])
+```
+
+

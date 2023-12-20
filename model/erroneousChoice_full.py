@@ -1,15 +1,12 @@
 from .abstractModel import abstractModelFull
-from scipy.sparse  import block_diag
-from scipy.sparse.linalg import spsolve_triangular
-from utility.linalg import sparse_cholesky
 import numpy as np
-from scipy.optimize import linprog
 from inference import slice_sampler
 import jax
+from itertools import combinations
 
 class erroneousChoice(abstractModelFull):
     
-    def __init__(self,data,Kernel,params,latent_dim,scale=1.65, jitter=1e-6,inf_method='advi',ARD=True):
+    def __init__(self,data,Kernel,params,latent_dim,typeR="rational",scale=1.65, jitter=1e-6,inf_method='advi',ARD=True):
         """
         The erroneousChoice model for modelling choice functions. The likelihood 
         uses a normal-cdf to smooth the indicators to model the errors. 
@@ -78,6 +75,32 @@ class erroneousChoice(abstractModelFull):
         self.CAr = CAr
         self.RAr = RAr
         
+        
+       
+        #make indices for fucc  covariance of ADVI
+        def make_indices(CA,RA):
+            val = CA+RA
+            left=val.copy()
+            right=val.copy()
+            res=list(combinations(val,2))
+            if len(res)>0:
+                r=np.vstack(res)
+                left=left+r[:,0].tolist()
+                right=right+r[:,1].tolist()
+            return left,right
+        
+        leftInd=[]
+        rightInd=[]
+        for i in range(len(CA)):
+            c,r = CA[i],RA[i]
+            lefti,righti=make_indices(c,r)
+            leftInd=leftInd+lefti
+            rightInd=rightInd+righti
+        LeftRight=np.unique(np.vstack([leftInd,rightInd]).T,axis=0)
+        self._leftindices =LeftRight[:,0]
+        self._rightindices=LeftRight[:,1]
+        
+
         def augmKernel(X1,X2,params):
             d = X1.shape[1]
             if ARD==True:
@@ -98,7 +121,6 @@ class erroneousChoice(abstractModelFull):
             '''
             #v = jax.scipy.stats.norm.cdf(U0[CAr[:,0]]-U0[CAr[:,1]])
             if len(CAr)>0:
-                print
                 x = (U0[CAr[:,0]]-U0[CAr[:,1]])
                 v = 0.5 * (jax.numpy.tanh(x * self._scale / 2) + 1)
                 q = -jax.numpy.prod(v,axis=1)-jax.numpy.prod(1-v,axis=1)
@@ -107,7 +129,7 @@ class erroneousChoice(abstractModelFull):
             else:
                 return jax.numpy.array(0.0)
         
-        def loglike_RA(U0, RAr):
+        def loglike_RA_rational(U0, RAr):
             '''
             U0: nx x nlatent utility matrix
             '''
@@ -119,14 +141,36 @@ class erroneousChoice(abstractModelFull):
                 return jax.numpy.sum(jax.numpy.log1p(eps+q))
             else:
                 return jax.numpy.array(0.0)
+            
+        def loglike_RA_pseudo(U0, RAr):
+            '''
+            U0: nx x nlatent utility matrix
+            '''
+            #A=jax.scipy.stats.norm.cdf(U0[RAr[:,0:-1],:]-U0[RAr[:,[-1]],:])
+            if len(RAr)>0:
+                x = (-U0[RAr[:,0:-1],:]+U0[RAr[:,[-1]],:])
+                A = 0.5 * (jax.numpy.tanh(x * self._scale / 2) + 1)
+                q = jax.numpy.prod(1-jax.numpy.prod(A,axis=1),axis=1)
+                return jax.numpy.sum(jax.numpy.log(eps+q))
+            else:
+                return jax.numpy.array(0.0)
         
-
-        def log_likelihood(f,data=[],params=[]):
-            #print(CAr)
-            U = jax.numpy.reshape(f,(self.latent_dim,self.X.shape[0])).T
-            #add worst element
-            U = jax.numpy.vstack([U,-np.ones((1,self.latent_dim))*np.inf])
-            return loglike_CA(U,CAr)+loglike_RA(U,RAr)  #+anchor(U)
+        if typeR=='rational':
+            loglike_RA = loglike_RA_rational
+            def log_likelihood(f,data=[],params=[]):
+                #print(CAr)
+                U = jax.numpy.reshape(f,(self.latent_dim,self.X.shape[0])).T
+                #add worst element
+                U = jax.numpy.vstack([U,-np.ones((1,self.latent_dim))*np.inf])
+                return loglike_CA(U,CAr)+loglike_RA_rational(U,RAr)  
+        elif typeR=='pseudo':
+            loglike_RA = loglike_RA_pseudo
+            def log_likelihood(f,data=[],params=[]):
+                #print(CAr)
+                U = jax.numpy.reshape(f,(self.latent_dim,self.X.shape[0])).T
+                #add worst element
+                U = jax.numpy.vstack([U,-np.ones((1,self.latent_dim))*np.inf])
+                return loglike_CA(U,CAr)+loglike_RA_pseudo(U,RAr)  #+anchor(U)
                 
         self._loglike_CA = loglike_CA 
         self._loglike_RA = loglike_RA 
