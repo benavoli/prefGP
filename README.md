@@ -1,5 +1,5 @@
 prefGP is a Gaussian process based library for inference and prediction from preference and choice data. It is implemented using Jax and PyTorch. 
-prefGP implements __ 9 models__ to learn from preference and choice data:
+prefGP implements 9 models to learn from preference and choice data:
 
 * Model 1: Consistent Preferences.
 * Model 2: Just Noticeable Difference 
