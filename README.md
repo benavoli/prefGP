@@ -2,7 +2,7 @@ prefGP is a Gaussian process based library for inference and prediction from pre
 prefGP implements __ 9 models__ to learn from preference and choice data:
 
 * Model 1: Consistent Preferences.
-* Model 2: Just Noticeable Difference
+* Model 2: Just Noticeable Difference 
 * Model 3: Probit for Erroneous Preferences
 * Model 4: Preferences with Gaussian noise error
 * Model 5: Probit  for Erroneous preferences as a classification problem
