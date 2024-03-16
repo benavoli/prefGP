@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sat Jun  5 2022
 
-@author: benavoli
-"""
 from jax.config import config
 config.update("jax_enable_x64", True)
 #config.update('jax_platform_name', 'cpu')
@@ -12,7 +8,7 @@ from jax import grad,  jit, jacfwd, jacrev
 
 from scipy.sparse.linalg import spsolve, spsolve_triangular
 from scipy.sparse import csc_matrix
-import pypardiso
+#import pypardiso
 from scipy.sparse import identity
 import numpy as np
 from utility.paramz import DictVectorizer

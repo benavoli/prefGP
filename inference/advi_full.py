@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sat Jun  5 2022
 
-@author: benavoli
-"""
 import jax
 from jax.config import config
 config.update("jax_enable_x64", True)
@@ -73,13 +69,14 @@ class inference_advi:
         
         from jax.scipy.optimize import minimize        
         def logjoint(f):
-            return -log_lik_fun(f)+f.T@IKxx@f/2
+            v=-log_lik_fun(f)
+            return v+f.T@IKxx@f/2
        
         #find MAP
         if init_f==[]:
             best_f=np.inf
             best_x=[]
-            for rnd in range(2):
+            for rnd in range(5):
                 rng = random.PRNGKey(rnd)
                 f0= jax.random.normal(rng,(K.shape[0],))*0.5
                 res=minimize(jit(logjoint),f0,
@@ -159,11 +156,13 @@ class inference_advi:
             else:
                 Sigma = A+self.jitter*jnp.eye(A.shape[0])
             vectorized_elbo = vmap(partial(exp_likelihood, target_log_density), in_axes=(0, None, None))
-            expected_log_like = jnp.nanmean(vectorized_elbo(rngs, f, Sigma))
+            vv=vectorized_elbo(rngs, f, Sigma)
+            #jax.debug.print("vv: {}", vv)
+            expected_log_like = jnp.nanmean(vv)
             elbo =  expected_log_like-kl_div(f,Sigma,IM)
             return elbo
         
-        num_samples = 100
+        num_samples = 1001
         #@partial(jit, static_argnums=(1,))
         @jit
         def objective_start(params, t):
@@ -189,10 +188,10 @@ class inference_advi:
             init_std = jax.numpy.ones((D,))
         else:
             indn =  np.tril_indices(D)
-            init_std = np.eye(D)[indn[0],indn[1]]
+            init_std = L[indn[0],indn[1]]#np.eye(D)
         #print(init_std)
         init_params = (init_mean, init_std, init_params_kernel)
-        opt_init, opt_update, get_params = optimizers. adam(step_size=0.01)
+        opt_init, opt_update, get_params = optimizers. adam(step_size=0.008) #0.002
         opt_state = opt_init(init_params)
 
         

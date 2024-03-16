@@ -146,10 +146,7 @@ def liness_step(x00, AA, bb, mean, C, nsamples,  tune=100, progress=True):
     while mc < nsamples+tune:
         nu0 = L@np.random.randn(L.shape[0],1)
         nu = np.asarray(AA@(nu0))
-        #print(nu0[0:5])
         x0 = AA@x00
-        print(type(x0),nu.shape)
-        print(type(nu),nu.shape)
         r_sq = np.power(x0,2) +np.power(nu,2)
         
 

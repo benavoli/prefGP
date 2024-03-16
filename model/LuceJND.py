@@ -8,7 +8,7 @@ from scipy.stats import norm
 
 class LuceJND(abstractModelFull):
     
-    def __init__(self,data,Kernel,params, inf_method='Laplace'):
+    def __init__(self,data,Kernel,params, inf_method='laplace'):
         """
         The LuceJND is a model for preference learning which accounts for the limit of discernibility
         of the subject. The likelihood coincides with Luce's just noticeable difference

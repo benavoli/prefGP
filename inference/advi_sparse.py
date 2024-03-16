@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sat Jun  5 2022
 
-@author: benavoli
-"""
 from jax.config import config
 config.update("jax_enable_x64", True)
 #config.update('jax_platform_name', 'cpu')
