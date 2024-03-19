@@ -40,5 +40,6 @@ The `notebooks` folder includes several ipython notebooks that demonstrate the u
 ```
 ## The Team
 The library was developed by
-- [Alessio Benavoli](https://alessiobenavoli.com/) (Trinity College Dublin)
 - [Dario Azzimonti](https://sites.google.com/view/darioazzimonti/home) (IDSIA)
+- [Alessio Benavoli](https://alessiobenavoli.com/) (Trinity College Dublin)
+
