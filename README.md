@@ -25,7 +25,7 @@ Download the repository  and then install
 pip install -r requirements.txt
 ```
 ## Example
-The `notebooks` folder includes several ipython notebooks that demonstrate the use of prefGP. For more details about the models used in the examples, please see below paper.
+The `notebooks` folder includes several ipython notebooks that demonstrate the use of prefGP. For more details about the models used in the examples, please see the below paper.
 
 ## Citing Us
 ```
