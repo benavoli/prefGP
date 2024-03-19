@@ -28,8 +28,16 @@ pip install -r requirements.txt
 The `notebooks` folder includes several ipython notebooks that demonstrate the use of prefGP. For more details about the models used in the examples, please see below paper.
 
 ## Citing Us
-
-
+```
+@article{prefGP2024,
+  title = {A tutorial on learning from preferences and choices with Gaussian Processes},
+  author = {Benavoli, Alessio and Azzimonti, Dario},
+  journal = {arXiv preprint},
+  year = {2024},
+  eprint = {2403.11782},
+  url = {https://arxiv.org/abs/2403.11782}
+}
+```
 ## The Team
 The library was developed by
 - [Alessio Benavoli](https://alessiobenavoli.com/) (Trinity College Dublin)
