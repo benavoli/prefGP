@@ -17,7 +17,7 @@
 
 **Requirements**:
 
-* Python >= 3.11
+* Python == 3.11.4
 
 Download the repository  and then install
 
