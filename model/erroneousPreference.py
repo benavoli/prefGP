@@ -7,6 +7,8 @@ from utility.linalg import build_sparse_prefM
 import scipy.sparse as sparse
 from scipy.stats import norm, multivariate_normal
 import jax
+from utility.paramz import DictVectorizer
+
 class erroneousPreference(abstractModelFull):
     
     def __init__(self,data,Kernel,params,inf_method='laplace',jitter=1e-6):
@@ -38,17 +40,21 @@ class erroneousPreference(abstractModelFull):
         self.PrefM = sparse.coo_matrix(self.PrefM, shape=(len(self.data["Pairs"]),self.X.shape[0]))
         self.PrefM = self.PrefM.toarray()
         
-        #this is used internally to estimate hyperparams via Laplace approximation
-        def log_likelihood(f,data=self.data,params=self.params):
-            W = self.PrefM
-            z = W@f
-            return np.sum(norm.logcdf(z))
-        '''
-        def log_likelihood(f,data=self.data,params=self.params):
-            W = self.PrefM
-            z = W@f
-            return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
-        '''
+        
+        if self.inf_method=='laplace':
+            #this is used internally to estimate hyperparams via Laplace approximation
+            def log_likelihood(f,data=self.data,params=self.params):
+                W = self.PrefM
+                z = W@f
+                return np.sum(norm.logcdf(z))
+        elif self.inf_method=='advi':
+            def log_likelihood(f,data=self.data,params=self.params):
+                W = self.PrefM
+                z = W@f
+                return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
+        
         def grad_log_like(f,data=self.data,params=self.params):
             W = self.PrefM
             z=W@f
@@ -82,7 +88,12 @@ class erroneousPreference(abstractModelFull):
         Computes the parameters of the SkewGP posterior
         '''
         W=self.PrefM
-        Kxx = self.Kernel(self.X,self.X,self.params)
+        if self.inf_method=='advi':
+            dic = DictVectorizer()       
+            params_kernel,bounds_hyper=dic.fit_transform(self.params)
+            Kxx = self.Kernel(self.X,self.X,params_kernel)
+        else:
+            Kxx = self.Kernel(self.X,self.X,self.params)
         Ω  = Kxx+np.eye(Kxx.shape[0])*self.jitter
         iω = np.diag(1/np.sqrt(np.diag(Ω)))
         xi = np.zeros((Ω.shape[0],1))+0.0

@@ -6,6 +6,8 @@ from inference import slice_sampler
 from utility.linalg import build_sparse_prefM
 import scipy.sparse as sparse
 from scipy.stats import norm
+import jax.numpy as jnp
+from jax.scipy.stats import norm
 
 class exactPreference(abstractModelFull):
     
@@ -36,19 +38,18 @@ class exactPreference(abstractModelFull):
                                         1)
         self.PrefM = sparse.coo_matrix(self.PrefM, shape=(len(self.data["Pairs"]),self.X.shape[0]))
         
-        #this is only used internally to estimate hyperparams via Laplace approximation
-        '''
-        import jax.numpy as jnp
-        from jax.scipy.stats import norm
-        def log_likelihood(f,data=self.data,params=self.params):
-            z=data['PrefM']@f
-            return jnp.sum(norm.logcdf(z/self._scale)) # we approximate the indicator with the normal CDF
-        self._log_likelihood = log_likelihood
-        '''
-        def log_likelihood(f,data=self.data,params=self.params):
-            W = self.PrefM/self._scale
-            z = W@f
-            return np.sum(norm.logcdf(z))
+        if self.inf_method=='laplace':
+            #this is only used internally to estimate hyperparams via Laplace approximation        
+            def log_likelihood(f,data=self.data,params=self.params):
+                z=data['PrefM']@f
+                return jnp.sum(norm.logcdf(z/self._scale)) # we approximate the indicator with the normal CDF
+        elif self.inf_method=='advi':
+            def log_likelihood(f,data=self.data,params=self.params):
+                W = self.PrefM/self._scale
+                z = W@f
+                return np.sum(norm.logcdf(z))
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
 
         def grad_log_like(f,data=self.data,params=self.params):
             W = self.PrefM/self._scale

@@ -5,6 +5,8 @@ from inference import laplace_sparse  as LAPsp
 from inference import advi_sparse as ADVIS
 from inference import advi_full as ADVIF
 import numpy as np
+from utility.paramz import DictVectorizer
+
 
 class abstractModelFull(ABC):
     
@@ -14,11 +16,20 @@ class abstractModelFull(ABC):
     
     def predict(self, Xpred):
         from scipy.linalg import cholesky, solve_triangular
-        Kxx = self.Kernel(self.X,self.X,self.params)
+        if self.inf_method=='advi':
+            params_kernel,bounds_hyper = DictVectorizer().fit_transform(self.params)
+            Kxx = self.Kernel(self.X,self.X,params_kernel)
+            Kxz = self.Kernel(self.X,Xpred,params_kernel)
+        elif self.inf_method=='laplace':
+            Kxx = self.Kernel(self.X,self.X,self.params)
+            Kxz = self.Kernel(self.X,Xpred,self.params)
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
         Kxx = Kxx +np.eye(Kxx.shape[0])*self.jitter
         L = cholesky(Kxx, lower=True)
         L_inv = solve_triangular(L.T, np.eye(L.shape[0]))
-        Kxz = self.Kernel(self.X,Xpred,self.params)
+
+        
         #Kzz = self.Kernel(Xpred,Xpred,self.params)
         IKxx = L_inv@L_inv.T
         return Kxz.T@IKxx@self.samples
@@ -64,7 +75,13 @@ class abstractModelSparse(ABC):
     def predict(self, Xpred):
         from scipy.sparse.linalg import spsolve_triangular
         from utility.linalg import sparse_cholesky
-        Kxx = self.Kernel(self.X,self.X,self.params)
+        if self.inf_method=='advi':
+            params_kernel,bounds_hyper = DictVectorizer().fit_transform(self.params)
+            Kxx = self.Kernel(self.X,self.X,params_kernel)
+        elif self.inf_method=='laplace':
+           Kxx = self.Kernel(self.X,self.X,self.params)
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
         Kxx = Kxx +np.eye(Kxx.shape[0])*self.jitter
         L = sparse_cholesky(Kxx, lower=True)
         L_inv = spsolve_triangular(L.T, np.eye(L.shape[0]))
