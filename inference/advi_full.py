@@ -48,7 +48,7 @@ class inference_advi:
     
 
     def advi(self, niterations, loglike,init_params_kernel
-             ,progress=True,kernel_hypers_fixed=False,diagonal=False,init_f=[]):
+             ,progress=True,kernel_hypers_fixed=False,diagonal=False,init_f=[],num_restarts=10):
     
         #set problem 
         rng = random.PRNGKey(1)
@@ -76,7 +76,7 @@ class inference_advi:
         if init_f==[]:
             best_f=np.inf
             best_x=[]
-            for rnd in range(10):
+            for rnd in range(num_restarts):
                 rng = random.PRNGKey(rnd)
                 f0= jax.random.normal(rng,(K.shape[0],))*0.5
                 res=minimize(jit(logjoint),f0,
@@ -252,7 +252,7 @@ class inference_advi:
         return loglike
     
     def optimize(self,niterations,progress=True,
-                 kernel_hypers_fixed=False,init_f=[],diagonal=False):
+                 kernel_hypers_fixed=False,init_f=[],diagonal=False,num_restarts=10):
         
         dic = DictVectorizer()       
         init_params_kernel,bounds_hyper=dic.fit_transform(self.params)
@@ -261,7 +261,7 @@ class inference_advi:
         f, Sigma, log_kernel_hypers, advi_params = self.advi(niterations,loglike,
                                                              init_params_kernel,
                                                              kernel_hypers_fixed=kernel_hypers_fixed,
-                                                             init_f=init_f,diagonal=diagonal)
+                                                             init_f=init_f,diagonal=diagonal,num_restarts=num_restarts)
         self.meanVI = f[:,None]
         self.SigmaVI = Sigma
         self.log_kernel_hypers = log_kernel_hypers

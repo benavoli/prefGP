@@ -40,20 +40,17 @@ class erroneousPreference(abstractModelFull):
         self.PrefM = sparse.coo_matrix(self.PrefM, shape=(len(self.data["Pairs"]),self.X.shape[0]))
         self.PrefM = self.PrefM.toarray()
         
-        
-        if self.inf_method=='laplace':
-            #this is used internally to estimate hyperparams via Laplace approximation
-            def log_likelihood(f,data=self.data,params=self.params):
-                W = self.PrefM
-                z = W@f
-                return np.sum(norm.logcdf(z))
-        elif self.inf_method=='advi':
-            def log_likelihood(f,data=self.data,params=self.params):
-                W = self.PrefM
-                z = W@f
-                return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
-        else:
-            raise ValueError("inf_method must be 'laplace' or 'advi'")
+        '''
+        #this is used internally to estimate hyperparams via Laplace approximation
+        def log_likelihood(f,data=self.data,params=self.params):
+            W = self.PrefM
+            z = W@f
+            return np.sum(norm.logcdf(z))
+        '''
+        def log_likelihood(f,data=self.data,params=self.params):
+            W = self.PrefM
+            z = W@f
+            return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
         
         def grad_log_like(f,data=self.data,params=self.params):
             W = self.PrefM
