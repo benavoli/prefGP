@@ -6,7 +6,8 @@ from inference import slice_sampler
 from utility.linalg import build_sparse_prefM
 import scipy.sparse as sparse
 from scipy.stats import norm
-
+from utility.paramz import DictVectorizer
+import jax
 class gaussianNoisePreference(abstractModelFull):
     
     def __init__(self,data,Kernel,params,inf_method='laplace'):
@@ -25,9 +26,7 @@ class gaussianNoisePreference(abstractModelFull):
         self.X = data["X"]
         self.params = params
         self._scale = 0.05
-        if inf_method=="advi":
-            print("Advi is not implemented, we run Laplace's approximation")
-            inf_method="laplace"
+
         
         #build sparse pref Matrix
         self.PrefM = build_sparse_prefM(self.data["Pairs"],
@@ -42,10 +41,18 @@ class gaussianNoisePreference(abstractModelFull):
         
         
         # block diagonal Kernel augmented with noise
-        def augmKernel(X1,X2,params):
-            Kxx=Kernel(X1,X2,params)
-            sigma2 = params["noise_variance"]["value"]
-            return block_diag(Kxx,sigma2*np.eye(self.X.shape[0]))
+        if self.inf_method=='laplace':
+            def augmKernel(X1,X2,params):
+                Kxx=Kernel(X1,X2,params)
+                sigma2 = params["noise_variance"]["value"]
+                return block_diag(Kxx,sigma2*np.eye(self.X.shape[0]))
+        elif self.inf_method=='advi':
+            def augmKernel(X1,X2,params):
+                Kxx=Kernel(X1,X2,params[0:-1])
+                sigma2 = params[-1]
+                return jax.scipy.linalg.block_diag(Kxx,sigma2*jax.numpy.eye(self.X.shape[0]))
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
         self.originalKernel = Kernel
         self.Kernel = augmKernel
         
@@ -65,10 +72,18 @@ class gaussianNoisePreference(abstractModelFull):
         self._grad_loglikelihood = []
         self._hess_loglikelihood = []
         '''
-        def log_likelihood(f,data=self.data,params=self.params):
-            W = self.augPrefM/self._scale
-            z = W@f
-            return np.sum(norm.logcdf(z))
+        if self.inf_method=='laplace':
+            def log_likelihood(f,data=self.data,params=self.params):
+                W = self.augPrefM/self._scale
+                z = W@f
+                return np.sum(norm.logcdf(z))
+        elif self.inf_method=='advi':
+            def log_likelihood(f,data=self.data,params=self.params):
+                z=(self.augPrefM.toarray()@f)/self._scale
+                return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
+
 
         def grad_log_like(f,data=self.data,params=self.params):
             W = self.augPrefM/self._scale
@@ -125,7 +140,13 @@ class gaussianNoisePreference(abstractModelFull):
         :type nsamples: integer
         :returns nx x nsamples array stored in self.samples
         """
-        Kxx = self.Kernel(self.X,self.X,self.params)
+        if self.inf_method=='advi':
+            dic = DictVectorizer()       
+            params_kernel,bounds_hyper=dic.fit_transform(self.params)
+            params_kernel=jax.numpy.exp(params_kernel)
+        else:
+            params_kernel=self.params
+        Kxx = self.Kernel(self.X,self.X,params_kernel)
         Kxx = Kxx+np.eye(Kxx.shape[0])*self.jitter
 
         A = self.augPrefM#.toarray() #self.data["augPrefM"]
@@ -146,11 +167,17 @@ class gaussianNoisePreference(abstractModelFull):
         :type Xpred: nD-array (ntestpoints x dimX)
         :returns (ntestpoints x nsamples) array  
         """
-        Kxx = self.originalKernel(self.X,self.X,self.params)+np.eye(self.X.shape[0])*self.jitter
+        if self.inf_method=='advi':
+            dic = DictVectorizer()       
+            params_kernel,bounds_hyper=dic.fit_transform(self.params)
+            params_kernel=jax.numpy.exp(params_kernel)[0:-1]
+        else:
+            params_kernel=self.params
+        Kxx = self.originalKernel(self.X,self.X,params_kernel)+np.eye(self.X.shape[0])*self.jitter
         L = cholesky(Kxx, lower=True)
         L_inv = solve_triangular(L.T, np.eye(L.shape[0]))
-        Kxz = self.originalKernel(self.X,Xpred,self.params)
+        Kxz = self.originalKernel(self.X,Xpred,params_kernel)
         IKxx = L_inv@L_inv.T
-        return Kxz.T@IKxx@self.samples
+        return np.array(Kxz.T@IKxx@self.samples)
 
         

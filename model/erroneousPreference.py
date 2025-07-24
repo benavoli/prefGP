@@ -91,7 +91,6 @@ class erroneousPreference(abstractModelFull):
         if self.inf_method=='advi':
             dic = DictVectorizer()       
             params_kernel,bounds_hyper=dic.fit_transform(self.params)
-            print(params_kernel)
             params_kernel=jnp.exp(params_kernel)
         else:
             params_kernel=self.params
