@@ -5,7 +5,8 @@ from inference import slice_sampler
 from utility.linalg import build_sparse_prefM
 import scipy.sparse as sparse
 from scipy.stats import norm
-
+from utility.paramz import DictVectorizer
+import jax
 class LuceJND(abstractModelFull):
     
     def __init__(self,data,Kernel,params, inf_method='laplace'):
@@ -29,9 +30,7 @@ class LuceJND(abstractModelFull):
         self.jitter = 1e-4
         self._scale = 0.01
 
-        if inf_method=="advi":
-            print("Advi is not implemented, we run Laplace's approximation")
-            inf_method="laplace"
+
         self.inf_method=inf_method
         
         #build sparse pref Matrix
@@ -45,11 +44,20 @@ class LuceJND(abstractModelFull):
         #build sparse pref Matrix
         self.ones = np.vstack([-np.ones((self.data["Pairs"].shape[0],1)),np.ones((2*self.data["Indisc"].shape[0],1))])
         self.PrefM = sparse.coo_matrix(self.PrefM, shape=(self.ones.shape[0],self.X.shape[0]))
+
+        if self.inf_method=='laplace':
+            #this is only used internally to estimate hyperparams via Laplace approximation
+            def log_likelihood(f,data=self.data,params=self.params):
+                z = -(self.PrefM@f-self.ones)/self._scale
+                return np.sum(norm.logcdf(z))
+        elif self.inf_method=='advi':
+            def log_likelihood(f,data=self.data,params=self.params):
+                z = -(self.PrefM.toarray()@f-self.ones)/self._scale
+                return jax.numpy.sum(jax.scipy.stats.norm.logcdf(z))
+        else:
+            raise ValueError("inf_method must be 'laplace' or 'advi'")
         
-        #this is only used internally to estimate hyperparams via Laplace approximation
-        def log_likelihood(f,data=self.data,params=self.params):
-            z = -(self.PrefM@f-self.ones)/self._scale
-            return np.sum(norm.logcdf(z))
+        
 
         def grad_log_like(f,data=self.data,params=self.params):
             W = -self.PrefM/self._scale
@@ -82,7 +90,13 @@ class LuceJND(abstractModelFull):
         :type nsamples: integer
         :returns (nx x nsamples) array stored in self.samples
         """
-        Kxx = self.Kernel(self.X,self.X,self.params)+np.eye(self.X.shape[0])*self.jitter
+        if self.inf_method=='advi':
+            dic = DictVectorizer()       
+            params_kernel,bounds_hyper=dic.fit_transform(self.params)
+            params_kernel=jax.numpy.exp(params_kernel)
+        else:
+            params_kernel=self.params
+        Kxx = self.Kernel(self.X,self.X,params_kernel)+np.eye(self.X.shape[0])*self.jitter
         A = self.PrefM.toarray()
         b = self.ones
         # find initial feasible 
