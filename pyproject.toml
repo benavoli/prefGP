@@ -1,0 +1,30 @@
+[project]
+name = "prefgp"
+version = "0.1.0"
+description = "prefGP is a Gaussian process based library for learning from preference and choice data"
+authors = [
+    {name = "Alessio Benavoli and Dario Azzimonti"}
+]
+license = "BSD-3-Clause license"
+readme = "README.md"
+requires-python = "3.11.4"
+dependencies = [
+    "requests (>=2.34.2,<3.0.0)",
+    "gpytorch (==1.11)",
+    "jax (==0.4.23)",
+    "numpy (==1.26.4)",
+    "pandas (==2.2.1)",
+    "scikit-learn (==1.4.0)",
+    "scipy (==1.12.0)",
+    "torch (==2.1.2)",
+    "tqdm (==4.66.1)",
+    "jaxlib (==0.4.23)",
+    "matplotlib (==3.8.3)",
+    "botorch (==0.9.3)",
+    "arviz (==0.21.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
