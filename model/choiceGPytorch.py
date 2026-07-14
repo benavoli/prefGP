@@ -11,6 +11,59 @@ from gpytorch.distributions import MultivariateNormal, Distribution
 from gpytorch.likelihoods import _OneDimensionalLikelihood
 import torch
 from torch import Tensor
+from gpytorch.functions import log_normal_cdf
+import numpy as np
+class PrefLikelihood(_OneDimensionalLikelihood):
+    
+    def __init__(self, dim_a: int, num_choices: int, num_gp = 1, use_batches = False,asclassif =False, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.dim_a = dim_a
+        self.num_gp = num_gp
+        self.eps = 1e-10
+        self.use_batches = use_batches
+        self.num_choices = num_choices
+        self.num_comb = len(torch.combinations(torch.ones(dim_a), 2))
+        self.asclassif=asclassif
+
+    
+    
+        
+    def log_prob_fun(self, function_samples: Tensor, CAr: Tensor, RAr: Tensor,_scale=1.65) -> Tensor:
+        
+        if function_samples.dim() > 2:
+            U = function_samples.transpose(1,2) if self.num_gp == function_samples.shape[2] else function_samples
+        else:
+            #asser num_gp == 1 ??
+            U = function_samples
+            U = U.reshape(U.shape[0],1,  U.shape[1])
+        if self.asclassif==False: #preference
+            x = (U[..., CAr[:, 0]] - U[..., RAr[:, 0]])
+        else:
+            x = U[...,torch.maximum(CAr[:,0],RAr[:,0])]* torch.sign(CAr[:,0]+1e-3) #
+        A =log_normal_cdf(x)
+        
+        #A = 0.5 * (torch.tanh(x * _scale / 2) + 1)
+        
+        return A[:,0,:] #torch.log(A[:,0,:])
+    
+    def forward(self, function_samples: Tensor, *args: Any, data: Dict[str, Tensor] = ..., **kwargs: Any) -> Distribution:
+        return super().forward(function_samples, *args, data=data, **kwargs)
+    
+    def expected_log_prob(self, observations: Tensor, function_dist: MultivariateNormal,  num_samples=500, average=True ,*args: Any, **kwargs: Any) -> Tensor:
+        
+             
+        #lambda_fun = lambda function_samples: self.log_prob_fun(function_samples, self.CAr, self.RAr)
+        #log_prob = self.quadrature(lambda_fun, function_dist)
+        def lambda_fun(function_samples):
+            return self.log_prob_fun(function_samples, observations[0,...], observations[1,...])
+       
+        function_samples = function_dist.rsample(torch.Size((num_samples,)))
+        if average:
+            log_prob = lambda_fun(function_samples).mean(axis=0)
+        else:
+            log_prob = lambda_fun(function_samples)
+        
+        return log_prob
 
 
 class ChoiceLikelihood(_OneDimensionalLikelihood):
@@ -99,8 +152,9 @@ class ChoiceLikelihood(_OneDimensionalLikelihood):
         A = 0.5 * (torch.tanh(x * _scale / 2) + 1)
         A = torch.prod(A, dim=1)
         
+        
         # this is replaces the nan from -inf+inf in x
-        full_A = torch.ones(torch.Size([U0.shape[0]]) + torch.Size([self.dim_a*self.num_choices]), dtype=A.dtype)
+        full_A = torch.ones(torch.Size([U0.shape[0]]) + torch.Size([self.dim_a*self.num_choices]), dtype=A.dtype,device=A.device)
         full_A[..., torch.arange(0, RAr.shape[0])] = 1-A
         
         # reshape to be able to product over the choice set
@@ -137,9 +191,14 @@ class ChoiceLikelihood(_OneDimensionalLikelihood):
             if self.CAr is None or self.RAr is None:
                 self.CAr, self.RAr = self.make_CAr_RAr(observations)
         
-        lambda_fun = lambda function_samples: self.log_prob_fun(function_samples, self.CAr, self.RAr)
+        #lambda_fun = lambda function_samples: self.log_prob_fun(function_samples, self.CAr, self.RAr)
+        #log_prob = self.quadrature(lambda_fun, function_dist)
+        def lambda_fun(function_samples):
+            return self.log_prob_fun(function_samples, self.CAr, self.RAr)
+        num_samples=1000
+        function_samples = function_dist.rsample(torch.Size((num_samples,)))
         
-        log_prob = self.quadrature(lambda_fun, function_dist)
+        log_prob = lambda_fun(function_samples).mean(axis=0)
         
         return log_prob
 
@@ -200,7 +259,7 @@ class PlackettLuceLikelihood(_OneDimensionalLikelihood):
         return log_prob
 
 class MultiChoiceGP(ApproximateGP):
-    def __init__(self, num_tasks, inducing_points, learn_inducing_locations=False):
+    def __init__(self, num_tasks, inducing_points, learn_inducing_locations=False,kerneltype="SE"):
 
         # We have to mark the CholeskyVariationalDistribution as batch
         # so that we learn a variational distribution for each task
@@ -208,12 +267,13 @@ class MultiChoiceGP(ApproximateGP):
             inducing_points.size(-2), batch_shape=torch.Size([num_tasks])
         )
 
-        variational_strategy = gpytorch.variational.IndependentMultitaskVariationalStrategy(
+        variational_strategy = gpytorch.variational.LMCVariationalStrategy(
             gpytorch.variational.VariationalStrategy(
                 self, inducing_points, variational_distribution, 
                 learn_inducing_locations=learn_inducing_locations
             ),
             num_tasks=num_tasks,
+            num_latents=num_tasks
         )
 
         super().__init__(variational_strategy)
@@ -221,10 +281,15 @@ class MultiChoiceGP(ApproximateGP):
         # The mean and covariance modules should be marked as batch
         # so we learn a different set of hyperparameters
         self.mean_module = gpytorch.means.ConstantMean(batch_shape=torch.Size([num_tasks]))
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(batch_shape=torch.Size([num_tasks])),
-            batch_shape=torch.Size([num_tasks])
-        )
+        if kerneltype=="SE":
+            self.covar_module = gpytorch.kernels.ScaleKernel(
+                gpytorch.kernels.RBFKernel(ard_num_dims=inducing_points.shape[-1],batch_shape=torch.Size([num_tasks])),
+                batch_shape=torch.Size([num_tasks])
+            )
+            self.covar_module.base_kernel.lengthscale= self.covar_module.base_kernel.lengthscale/2.0
+        elif kerneltype=="Linear":
+            self.covar_module =  gpytorch.kernels.LinearKernel(ard_num_dims=inducing_points.shape[-1],batch_shape=torch.Size([num_tasks]))
+        #self.covar_module.outputscale = self.covar_module.outputscale*1.0
 
     def forward(self, x):
         # The forward function should be written as if we were dealing with each output
@@ -249,9 +314,9 @@ class AbstractPrefGPtorch:
         self.innermodel = None
         self.likelihood = None
     
-    def optimize(self, x_train, observations, num_iterations=1000, lr=0.01):
-        self.innermodel.train()
-        self.likelihood.train()
+    def optimize(self, x_train, observations, device, num_iterations=1000, lr=0.01, jitter=1e-4):
+        self.innermodel.train().to(device)
+        self.likelihood.train().to(device)
         
         # Use the adam optimizer
         optimizer = torch.optim.Adam(self.innermodel.parameters(), lr=lr)
@@ -259,43 +324,43 @@ class AbstractPrefGPtorch:
         # "Loss" for GPs - the marginal log likelihood
         # num_data refers to the number of training datapoints
         mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.innermodel, self.num_target)
-        
-        for i in range(num_iterations):
-            optimizer.zero_grad()
-
-            output = self.innermodel(x_train)
-
-            loss = -mll(output, observations)
-            loss.backward()
-            
-            print(f'Iter {i+1}/{num_iterations} - Loss: {loss}')
-            
-            optimizer.step()
-    
-    def optimize_batches(self, dataloader, num_iterations=1000, lr=0.01):
-        self.innermodel.train()
-        self.likelihood.train()
-        
-        # Use the adam optimizer
-        optimizer = torch.optim.Adam(self.innermodel.parameters(), lr=lr)
-        
-        # "Loss" for GPs - the marginal log likelihood
-        # num_data refers to the number of training datapoints
-        mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.innermodel, self.num_target)
-        
-        for i in range(num_iterations):
-            step_loss = 0
-            for data, target in dataloader:
+        with gpytorch.settings.cholesky_jitter(jitter), gpytorch.settings.cholesky_max_tries(5):
+            for i in range(num_iterations):
                 optimizer.zero_grad()
-                # Get predictive output
-                output = self.innermodel(data)
-                # Calc loss and backprop gradients
-                loss = -mll(output, target)
+    
+                output = self.innermodel(x_train)
+    
+                loss = -mll(output, observations)
                 loss.backward()
-                step_loss += loss
+                
+                print(f'Iter {i+1}/{num_iterations} - Loss: {loss}')
+                
                 optimizer.step()
+    
+    def optimize_batches(self, dataloader, device,num_iterations=1000, lr=0.01, jitter=1e-4):
+        self.innermodel.train().to(device)
+        self.likelihood.train().to(device)
         
-            print(f'Iter {i+1}/{num_iterations} - Loss: {step_loss/len(dataloader)}')
+        # Use the adam optimizer
+        optimizer = torch.optim.Adam(self.innermodel.parameters(), lr=lr)
+        
+        # "Loss" for GPs - the marginal log likelihood
+        # num_data refers to the number of training datapoints
+        mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.innermodel, self.num_target)
+        with gpytorch.settings.cholesky_jitter(jitter), gpytorch.settings.cholesky_max_tries(7):
+            for i in range(num_iterations):
+                step_loss = 0
+                for data, target in dataloader:
+                    optimizer.zero_grad()
+                    # Get predictive output
+                    output = self.innermodel(data)
+                    # Calc loss and backprop gradients
+                    loss = -mll(output, target)
+                    loss.backward()
+                    step_loss += loss
+                    optimizer.step()
+        
+                print(f'Iter {i+1}/{num_iterations} - Loss: {step_loss/len(dataloader)}')
     
     def predict(self, x_pred,covariance=True):
         self.innermodel.eval()
@@ -305,9 +370,18 @@ class AbstractPrefGPtorch:
             y_preds = self.innermodel(x_pred)
             lower, upper = y_preds.confidence_region()
         if covariance:    
-            return y_preds.mean.numpy(), y_preds.covariance_matrix.numpy(), lower.numpy(), upper.numpy()
+            return y_preds.mean.cpu().numpy(), y_preds.covariance_matrix.detach().cpu().numpy(), lower.cpu().numpy(), upper.cpu().numpy()
         else:
-            return y_preds.mean.numpy(), y_preds.variance.numpy(), lower.numpy(), upper.numpy()
+            return y_preds.mean.cpu().numpy(), y_preds.variance.detach().cpu().numpy(), lower.cpu().numpy(), upper.cpu().numpy()
+        
+    def predict_proba(self,CAtest,RAtest,x_pred,num_samples=1000,average=True,jitter=1e-4):
+        self.innermodel.eval()
+        self.likelihood.eval()
+        with gpytorch.settings.cholesky_jitter(jitter), gpytorch.settings.cholesky_max_tries(5), torch.no_grad():
+            y_preds = self.innermodel(x_pred)
+            LP=self.likelihood.expected_log_prob(torch.hstack([torch.tensor(CAtest),torch.tensor(RAtest)]).T[...,None],
+                                                         y_preds,num_samples=num_samples, average=average).T
+        return LP
     
     def _load(self, location):
 
@@ -339,11 +413,11 @@ class AbstractPrefGPtorch:
         # Save gpytorch model
         torch.save(state_dict_to_save,location+"/gpytorch_model.pth")
 
-    
 
-class ChoiceGPtorch(AbstractPrefGPtorch):
+
+class PrefGPtorch(AbstractPrefGPtorch):
     
-    def __init__(self, dimA, num_gp, num_choices, inducing_points, learn_inducing_locations=False, use_batches=False):
+    def __init__(self, dimA, num_gp, num_choices, inducing_points, learn_inducing_locations=False, use_batches=False,kerneltype="SE",asclassif =False):
 
         self.num_gp = num_gp
         self.num_target = num_choices
@@ -358,9 +432,59 @@ class ChoiceGPtorch(AbstractPrefGPtorch):
             "use_batches": self.use_batches,
             "num_target": self.num_target
         }  
+        self.kerneltype=kerneltype
+        self.innermodel = MultiChoiceGP(num_tasks=self.num_gp, inducing_points=inducing_points, 
+                                        learn_inducing_locations=self.learn_inducing_locations,kerneltype=kerneltype)
+        self.likelihood = PrefLikelihood(dim_a=dimA, num_choices=self.num_target, num_gp=self.num_gp, use_batches=self.use_batches,asclassif =asclassif)
 
+    
+
+    def load(self, location):
+
+        # Load and initialize parameters
+        self._load(location)
+
+        self.learn_inducing_locations = self.params_dict['learn_inducing_locations']
+        self.num_gp = self.params_dict['num_gp']
+        self.dimA = self.params_dict['dimA']
+        self.num_target = self.params_dict['num_target']
+        self.use_batches = self.params_dict['use_batches']
+
+
+        # Load and initialize inducing points
+        with open(location+"/ind_pts.pkl", 'rb') as handle:
+            inducing_points = pickle.load(handle)
+
+            
         self.innermodel = MultiChoiceGP(num_tasks=self.num_gp, inducing_points=inducing_points, 
                                         learn_inducing_locations=self.learn_inducing_locations)
+        self.likelihood = PrefLikelihood(dim_a=self.dimA, num_choices=self.num_target, 
+                                           num_gp=self.num_gp, use_batches=self.use_batches)
+
+        
+        state_dict = torch.load(location+"/gpytorch_model.pth")
+        self.innermodel.load_state_dict(state_dict)
+        
+class ChoiceGPtorch(AbstractPrefGPtorch):
+    
+    def __init__(self, dimA, num_gp, num_choices, inducing_points, learn_inducing_locations=False, use_batches=False,kerneltype="SE"):
+
+        self.num_gp = num_gp
+        self.num_target = num_choices
+        self.learn_inducing_locations = learn_inducing_locations
+        self.use_batches = use_batches
+        self.dimA = dimA
+        
+        self.params_dict = {
+            "num_gp": self.num_gp,
+            "dimA": self.dimA,
+            "learn_inducing_locations": self.learn_inducing_locations,
+            "use_batches": self.use_batches,
+            "num_target": self.num_target
+        }  
+        self.kerneltype=kerneltype
+        self.innermodel = MultiChoiceGP(num_tasks=self.num_gp, inducing_points=inducing_points, 
+                                        learn_inducing_locations=self.learn_inducing_locations,kerneltype=kerneltype)
         self.likelihood = ChoiceLikelihood(dim_a=dimA, num_choices=self.num_target, num_gp=self.num_gp, use_batches=self.use_batches)
 
     
@@ -391,7 +515,7 @@ class ChoiceGPtorch(AbstractPrefGPtorch):
         state_dict = torch.load(location+"/gpytorch_model.pth")
         self.innermodel.load_state_dict(state_dict)
   
-    
+
     
 class PreferenceGPtorch(AbstractPrefGPtorch):
     def __init__(self, num_gp, num_pref, inducing_points, learn_inducing_locations=False, use_batches=False):

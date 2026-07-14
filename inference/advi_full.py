@@ -73,7 +73,7 @@ class inference_advi:
             return v+f.T@IKxx@f/2
        
         #find MAP
-        if init_f==[]:
+        if len(init_f)==0:
             best_f=np.inf
             best_x=[]
             for rnd in range(num_restarts):
@@ -92,13 +92,14 @@ class inference_advi:
         else:
             f0=init_f
             #print(logjoint(f0))
+            '''
             res=minimize(jit(logjoint),f0,
                          #bounds=[[-0.1,0.1]]*len(f0),
                          options={'maxiter': 300}, method="BFGS")
             #print(res.fun)
             self.MAP = res.x
             f0=res.x
-        
+            '''
         # define ADVI functions
         @jit
         def target_log_density(f):
@@ -246,9 +247,9 @@ class inference_advi:
               
         return f, Sigma, log_kernel_hypers, params
     
-    def _log_like(self):
+    def _log_like(self,init_params_kernel):
         def loglike(f):
-            return self.log_likelihood(f,self.data,self.params)
+            return self.log_likelihood(f,self.data,init_params_kernel) #self.params)
         return loglike
     
     def optimize(self,niterations,progress=True,
@@ -257,7 +258,7 @@ class inference_advi:
         dic = DictVectorizer()       
         init_params_kernel,bounds_hyper=dic.fit_transform(self.params)
         
-        loglike =self._log_like()
+        loglike =self._log_like(init_params_kernel)
         f, Sigma, log_kernel_hypers, advi_params = self.advi(niterations,loglike,
                                                              init_params_kernel,
                                                              kernel_hypers_fixed=kernel_hypers_fixed,

@@ -54,8 +54,8 @@ class erroneousChoice(abstractModelFull):
         CAr, RAr,GroupCA,GroupRA = self._make_CAr_RAr(CA, RA, self.dimA)
         self.GroupCA=GroupCA
         self.GroupRA=GroupRA
-        self.CAr = CAr
-        self.RAr = RAr
+        self.CAr = jax.numpy.asarray(CAr)
+        self.RAr = jax.numpy.asarray(RAr)
         self.eps=1e-10
         
         
@@ -72,7 +72,7 @@ class erroneousChoice(abstractModelFull):
                 right=right+r[:,1].tolist()
             return left,right
         
-
+        @jax.jit
         def augmKernel(X1,X2,params):
             d = X1.shape[1]
             if ARD==True:
@@ -90,20 +90,25 @@ class erroneousChoice(abstractModelFull):
         
         if typeR=='rational':
             loglike_RA = self.loglike_RA_rational
+            @jax.jit
             def log_likelihood(f,data=[],params=[]):
                 #print(CAr)
                 U = jax.numpy.reshape(f,(self.latent_dim,self.X.shape[0])).T
                 #add worst element
                 U = jax.numpy.vstack([U,-np.ones((1,self.latent_dim))*np.inf])
-                return self.loglike_CA(U,CAr)+self.loglike_RA_rational(U,RAr)  
+                #tmp = self.loglike_RA_rational(U,RAr)
+                #jax.debug.print("{}",tmp)
+                #jax.debug.print("{}",11)
+                return self.loglike_CA(U,self.CAr)+self.loglike_RA_rational(U,self.RAr)  
         elif typeR=='pseudo':
             loglike_RA = self.loglike_RA_pseudo
+            @jax.jit
             def log_likelihood(f,data=[],params=[]):
                 #print(CAr)
                 U = jax.numpy.reshape(f,(self.latent_dim,self.X.shape[0])).T
                 #add worst element
                 U = jax.numpy.vstack([U,-np.ones((1,self.latent_dim))*np.inf])
-                return self.loglike_CA(U,CAr)+self.loglike_RA_pseudo(U,RAr)  #+anchor(U)
+                return self.loglike_CA(U,self.CAr)+self.loglike_RA_pseudo(U,self.RAr)  #+anchor(U)
                 
         self._loglike_CA = self.loglike_CA 
         self._loglike_RA = loglike_RA 
@@ -111,7 +116,7 @@ class erroneousChoice(abstractModelFull):
         self.recompute_grad_hessian_at_params_change=False
    
         
-    
+  
     def loglike_CA(self,U0,CAr):
         '''
         U0: nx x nlatent utility matrix
@@ -125,7 +130,7 @@ class erroneousChoice(abstractModelFull):
                   jax.numpy.log1p(self.eps+q))
         else:
             return jax.numpy.array(0.0)
-   
+
     def loglike_RA_rational(self,U0, RAr):
         '''
         U0: nx x nlatent utility matrix
@@ -138,7 +143,7 @@ class erroneousChoice(abstractModelFull):
             return jax.numpy.sum(jax.numpy.log1p(self.eps+q))
         else:
             return jax.numpy.array(0.0)
-       
+    #@jax.jit   
     def loglike_RA_pseudo(self,U0, RAr):
         '''
         U0: nx x nlatent utility matrix
